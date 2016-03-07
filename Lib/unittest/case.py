@@ -39,6 +39,13 @@ class _UnexpectedSuccess(Exception):
     The test was supposed to fail, but it didn't!
     """
 
+class _ExpectedFailure(Exception):
+    """
+    The test was supposed to fail, and did!
+    """
+    def __init__(self, exc=None):
+        self.exc = exc
+
 
 class _Outcome(object):
     def __init__(self, result=None):
@@ -63,6 +70,8 @@ class _Outcome(object):
             self.skipped.append((test_case, str(e)))
         except _ShouldStop:
             pass
+        except _ExpectedFailure as e:
+            self.expectedFailure = e.exc
         except:
             exc_info = sys.exc_info()
             if self.expecting_failure:
@@ -118,6 +127,42 @@ def skipUnless(condition, reason):
 def expectedFailure(test_item):
     test_item.__unittest_expecting_failure__ = True
     return test_item
+
+def expectedFailureIf(condition, klass=AssertionError):
+    """
+    Treat a test as expected failure if condition is true and klass is raised.
+    """
+    def decorator(test_item):
+        @functools.wraps(test_item)
+        def expectedFailure_wrapper(*args, **kwargs):
+            try:
+                test_item(*args, **kwargs)
+            except klass:
+                if condition:
+                    test_item.__unittest_expecting_failure__ = True
+                    raise _ExpectedFailure(sys.exc_info())
+                else:
+                    raise
+        return expectedFailure_wrapper
+    return decorator
+
+def expectedFailureUnless(condition, klass=AssertionError):
+    """
+    Treat a test as expected failure unless the condition is true and klass is raised.
+    """
+    def decorator(test_item):
+        @functools.wraps(test_item)
+        def expectedFailure_wrapper(*args, **kwargs):
+            try:
+                test_item(*args, **kwargs)
+            except klass:
+                if not condition:
+                    test_item.__unittest_expecting_failure__ = True
+                    raise _ExpectedFailure(sys.exc_info())
+                else:
+                    raise
+        return expectedFailure_wrapper
+    return decorator
 
 def _is_subtype(expected, basetype):
     if isinstance(expected, tuple):
@@ -562,6 +607,15 @@ class TestCase(object):
         else:
             addUnexpectedSuccess(self)
 
+    def _expecting_failure(self, testMethod):
+        expecting_failure_method = getattr(testMethod,
+                                           "__unittest_expecting_failure__",
+                                           False)
+        expecting_failure_class = getattr(self,
+                                          "__unittest_expecting_failure__",
+                                          False)
+        return expecting_failure_class or expecting_failure_method
+
     def run(self, result=None):
         orig_result = result
         if result is None:
@@ -583,11 +637,7 @@ class TestCase(object):
             finally:
                 result.stopTest(self)
             return
-        expecting_failure_method = getattr(testMethod,
-                                           "__unittest_expecting_failure__", False)
-        expecting_failure_class = getattr(self,
-                                          "__unittest_expecting_failure__", False)
-        expecting_failure = expecting_failure_class or expecting_failure_method
+
         outcome = _Outcome(result)
         try:
             self._outcome = outcome
@@ -595,7 +645,7 @@ class TestCase(object):
             with outcome.testPartExecutor(self):
                 self.setUp()
             if outcome.success:
-                outcome.expecting_failure = expecting_failure
+                outcome.expecting_failure = self._expecting_failure(testMethod)
                 with outcome.testPartExecutor(self, isTest=True):
                     testMethod()
                 outcome.expecting_failure = False
@@ -607,11 +657,10 @@ class TestCase(object):
                 self._addSkip(result, test, reason)
             self._feedErrorsToResult(result, outcome.errors)
             if outcome.success:
-                if expecting_failure:
-                    if outcome.expectedFailure:
-                        self._addExpectedFailure(result, outcome.expectedFailure)
-                    else:
-                        self._addUnexpectedSuccess(result)
+                if outcome.expectedFailure:
+                    self._addExpectedFailure(result, outcome.expectedFailure)
+                elif self._expecting_failure(testMethod):
+                    self._addUnexpectedSuccess(result)
                 else:
                     result.addSuccess(self)
             return result

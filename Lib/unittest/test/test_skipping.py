@@ -178,6 +178,90 @@ class Test_TestSkipping(unittest.TestCase):
         self.assertIs(result.expectedFailures[0][0], test)
         self.assertTrue(result.wasSuccessful())
 
+    def test_expected_failure_if(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(True)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(len(result.failures), 0)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_if_not_condition(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(False)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_if_not_klass(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(True, TypeError)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_unless(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(False)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_unless_if_condition(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(True)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_unless_not_klass(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(False, TypeError)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
     def test_unexpected_success(self):
         class Foo(unittest.TestCase):
             @unittest.expectedFailure
