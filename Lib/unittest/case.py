@@ -48,6 +48,7 @@ class _Outcome(object):
         self.success = True
         self.skipped = []
         self.expectedFailure = None
+        self.expecting_failure_check = None
         self.errors = []
 
     @contextlib.contextmanager
@@ -63,9 +64,12 @@ class _Outcome(object):
             self.skipped.append((test_case, str(e)))
         except _ShouldStop:
             pass
-        except:
+        except Exception as e:
             exc_info = sys.exc_info()
-            if self.expecting_failure:
+            if self.expecting_failure_check:
+                if isinstance(e, self.expecting_failure_check):
+                    self.expectedFailure = exc_info
+            elif self.expecting_failure:
                 self.expectedFailure = exc_info
             else:
                 self.success = False
@@ -118,6 +122,37 @@ def skipUnless(condition, reason):
 def expectedFailure(test_item):
     test_item.__unittest_expecting_failure__ = True
     return test_item
+
+def expectedFailureIf(condition, klass=AssertionError):
+    """
+
+    """
+    def decorator(test_item):
+        if not isinstance(test_item, type):
+            @functools.wraps(test_item)
+            def skip_wrapper(*args, **kwargs):
+                if condition:
+                    test_item.expecting_failure_check = klass
+                test_item(*args, **kwargs)
+            return skip_wrapper
+        if condition:
+            test_item.expecting_failure_check = klass
+    return decorator
+
+def expectedFailureUnless(condition, klass=AssertionError):
+    def decorator(test_item):
+        if not isinstance(test_item, type):
+            @functools.wraps(test_item)
+            def skip_wrapper(*args, **kwargs):
+                if not condition:
+                    raise _ExpectedFailureException(klass)
+#                    test_item.expecting_failure_check = klass
+                test_item(*args, **kwargs)
+            return skip_wrapper
+        if not condition:
+            test_item.expecting_failure_check = klass
+    return decorator
+
 
 def _is_subtype(expected, basetype):
     if isinstance(expected, tuple):
@@ -588,6 +623,14 @@ class TestCase(object):
         expecting_failure_class = getattr(self,
                                           "__unittest_expecting_failure__", False)
         expecting_failure = expecting_failure_class or expecting_failure_method
+
+        expecting_failure_check_method = getattr(testMethod,
+                                                 "expecting_failure_check",
+                                                 None)
+        expecting_failure_check_class = getattr(self,
+                                                "expecting_failure_check",
+                                                None)
+        expecting_failure_check = expecting_failure_check_method or expecting_failure_check_class
         outcome = _Outcome(result)
         try:
             self._outcome = outcome
@@ -596,6 +639,7 @@ class TestCase(object):
                 self.setUp()
             if outcome.success:
                 outcome.expecting_failure = expecting_failure
+                outcome.expecting_failure_check = expecting_failure_check
                 with outcome.testPartExecutor(self, isTest=True):
                     testMethod()
                 outcome.expecting_failure = False
@@ -607,7 +651,7 @@ class TestCase(object):
                 self._addSkip(result, test, reason)
             self._feedErrorsToResult(result, outcome.errors)
             if outcome.success:
-                if expecting_failure:
+                if expecting_failure or expecting_failure_check:
                     if outcome.expectedFailure:
                         self._addExpectedFailure(result, outcome.expectedFailure)
                     else:

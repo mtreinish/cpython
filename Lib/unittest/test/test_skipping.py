@@ -178,6 +178,207 @@ class Test_TestSkipping(unittest.TestCase):
         self.assertIs(result.expectedFailures[0][0], test)
         self.assertTrue(result.wasSuccessful())
 
+    def test_expected_failure_if(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(True)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_if_not_condition(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(False)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_if_not_klass(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(True, TypeError)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_if_with_wrapped_class(self):
+        @unittest.expectedFailureIf(True)
+        class Foo(unittest.TestCase):
+            def test_1(self):
+                self.assertTrue(False)
+
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_1")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_if_with_wrapped_subclass(self):
+        class Foo(unittest.TestCase):
+            def test_1(self):
+                self.assertTrue(False)
+
+        @unittest.expectedFailureIf(True)
+        class Bar(Foo):
+            pass
+
+        events = []
+        result = LoggingResult(events)
+        test = Bar("test_1")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_if_subtests(self):
+        # A failure in any subtest counts as the expected failure of the
+        # whole test.
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureIf(True)
+            def test_die(self):
+                with self.subTest():
+                    # This one succeeds
+                    pass
+                with self.subTest():
+                    self.fail("help me!")
+                with self.subTest():
+                    # This one doesn't get executed
+                    self.fail("shouldn't come here")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addSubTestSuccess',
+                          'addExpectedFailure', 'stopTest'])
+        self.assertEqual(len(result.expectedFailures), 1)
+        self.assertIs(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_unless(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(False)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_unless_if_condition(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(True)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_unless_not_klass(self):
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(False, TypeError)
+            def test_die(self):
+                self.fail("help me!")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addFailure', 'stopTest'])
+        self.assertEqual(result.failures[0][0], test)
+        self.assertFalse(result.wasSuccessful())
+
+    def test_expected_failure_unless_with_wrapped_class(self):
+        @unittest.expectedFailureUnless(False)
+        class Foo(unittest.TestCase):
+            def test_1(self):
+                self.assertTrue(False)
+
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_1")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_failure_unless_with_wrapped_subclass(self):
+        class Foo(unittest.TestCase):
+            def test_1(self):
+                self.assertTrue(False)
+
+        @unittest.expectedFailureUnless(False)
+        class Bar(Foo):
+            pass
+
+        events = []
+        result = LoggingResult(events)
+        test = Bar("test_1")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addExpectedFailure', 'stopTest'])
+        self.assertEqual(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+    def test_expected_unless_failure_subtests_if(self):
+        # A failure in any subtest counts as the expected failure of the
+        # whole test.
+        class Foo(unittest.TestCase):
+            @unittest.expectedFailureUnless(False)
+            def test_die(self):
+                with self.subTest():
+                    # This one succeeds
+                    pass
+                with self.subTest():
+                    self.fail("help me!")
+                with self.subTest():
+                    # This one doesn't get executed
+                    self.fail("shouldn't come here")
+        events = []
+        result = LoggingResult(events)
+        test = Foo("test_die")
+        test.run(result)
+        self.assertEqual(events,
+                         ['startTest', 'addSubTestSuccess',
+                          'addExpectedFailure', 'stopTest'])
+        self.assertEqual(len(result.expectedFailures), 1)
+        self.assertIs(result.expectedFailures[0][0], test)
+        self.assertTrue(result.wasSuccessful())
+
+
     def test_unexpected_success(self):
         class Foo(unittest.TestCase):
             @unittest.expectedFailure
